@@ -38,7 +38,7 @@ public class RodarEmbutido {
       //assertEquals("List.size()", 3, list.size());
 
       for (Movie movie : list) {
-          System.out.format(" ---- %s %s %s    ----\n", movie.getDirector(), movie.getTitle(), movie.getYear() );
+          System.out.format(" ---- %50s %50s %50s    ----\n", movie.getDirector(), movie.getTitle(), movie.getYear() );
           movies.deleteMovie(movie);
       }
 
