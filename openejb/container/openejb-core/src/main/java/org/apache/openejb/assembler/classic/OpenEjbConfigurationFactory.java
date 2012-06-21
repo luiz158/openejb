@@ -33,5 +33,4 @@ public interface OpenEjbConfigurationFactory {
     public ContainerSystemInfo getContainerSystemInformation()throws OpenEJBException;
      */
 
-
 }

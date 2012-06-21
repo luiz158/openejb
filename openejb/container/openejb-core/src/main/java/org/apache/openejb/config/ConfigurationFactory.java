@@ -70,13 +70,13 @@ import org.apache.openejb.config.sys.AdditionalDeployments;
 import org.apache.openejb.config.sys.ConnectionManager;
 import org.apache.openejb.config.sys.Container;
 import org.apache.openejb.config.sys.Deployments;
-import org.apache.openejb.config.sys.InitHooks;
 import org.apache.openejb.config.sys.JaxbOpenejb;
 import org.apache.openejb.config.sys.JndiProvider;
 import org.apache.openejb.config.sys.Openejb;
 import org.apache.openejb.config.sys.ProxyFactory;
 import org.apache.openejb.config.sys.Resource;
 import org.apache.openejb.config.sys.SecurityService;
+import org.apache.openejb.config.sys.Service;
 import org.apache.openejb.config.sys.ServiceProvider;
 import org.apache.openejb.config.sys.TransactionManager;
 import org.apache.openejb.jee.Application;
@@ -98,7 +98,6 @@ import org.apache.openejb.util.Messages;
 import org.apache.openejb.util.SuperProperties;
 import org.apache.openejb.util.URISupport;
 import org.apache.openejb.util.URLs;
-import org.apache.openejb.util.UpdateChecker;
 import org.apache.openejb.util.proxy.QueryProxy;
 import org.apache.xbean.finder.MetaAnnotatedClass;
 
@@ -114,10 +113,6 @@ public class ConfigurationFactory implements OpenEjbConfigurationFactory {
     protected static final String VALIDATION_SKIP_PROPERTY = "openejb.validation.skip";
     private static final Logger logger = Logger.getInstance(LogCategory.OPENEJB_STARTUP_CONFIG, ConfigurationFactory.class);
     private static final Messages messages = new Messages(ConfigurationFactory.class);
-
-    private static final Map<String, String> KNOWN_HOOKS = new HashMap<String, String>() {{
-        put("update-checker", UpdateChecker.class.getName());
-    }};
 
     private static final String IGNORE_DEFAULT_VALUES_PROP = "IgnoreDefaultValues";
 
@@ -385,12 +380,14 @@ public class ConfigurationFactory implements OpenEjbConfigurationFactory {
 
         loadPropertiesDeclaredConfiguration(openejb);
 
-        initHook();
-
         sys = new OpenEjbConfiguration();
         sys.containerSystem = new ContainerSystemInfo();
         sys.facilities = new FacilitiesInfo();
 
+        for (Service service : openejb.getServices()) {
+            final JndiContextInfo info = configureService(service, JndiContextInfo.class);
+            sys.facilities.services.add(info);
+        }
 
         for (final JndiProvider provider : openejb.getJndiProvider()) {
             final JndiContextInfo info = configureService(provider, JndiContextInfo.class);
@@ -490,33 +487,8 @@ public class ConfigurationFactory implements OpenEjbConfigurationFactory {
         final OpenEjbConfiguration finished = sys;
         sys = null;
         openejb = null;
+
         return finished;
-    }
-
-    private void initHook() {
-        if (openejb == null) {
-            return;
-        }
-
-        final ClassLoader loader = Thread.currentThread().getContextClassLoader();
-        if (loader == null) {
-            return;
-        }
-
-        for (InitHooks hook : openejb.getHooks()) {
-            String name = hook.getName();
-            if (KNOWN_HOOKS.containsKey(name)) { // aliases
-                name = KNOWN_HOOKS.get(name);
-            }
-
-            try {
-                final Class<?> clazz = loader.loadClass(name);
-                final Runnable instance = (Runnable) clazz.newInstance();
-                instance.run();
-            } catch (Exception e) {
-                logger.error("can't run hook '" + hook.getName() + "'", e);
-            }
-        }
     }
 
     private List<String> getDeclaredApps() {
@@ -669,9 +641,6 @@ public class ConfigurationFactory implements OpenEjbConfigurationFactory {
                     }
                     deployments.setClasspath(new URLClassLoader(urls.toArray(new URL[urls.size()])));
                 }
-            } else if (object instanceof InitHooks) {
-                final InitHooks hook = (InitHooks) object;
-                hook.setName(map.remove("name"));
             }
 
             return object;
@@ -816,10 +785,10 @@ public class ConfigurationFactory implements OpenEjbConfigurationFactory {
     }
 
     private static class DefaultService {
-        private final Class<? extends Service> type;
+        private final Class<? extends org.apache.openejb.config.Service> type;
         private final String id;
 
-        public DefaultService(final String id, final Class<? extends Service> type) {
+        public DefaultService(final String id, final Class<? extends org.apache.openejb.config.Service> type) {
             this.id = id;
             this.type = type;
         }
@@ -827,7 +796,7 @@ public class ConfigurationFactory implements OpenEjbConfigurationFactory {
 
     private static final Map<Class<? extends ServiceInfo>, DefaultService> defaultProviders = new HashMap<Class<? extends ServiceInfo>, DefaultService>();
 
-    private static final Map<Class<? extends ServiceInfo>, Class<? extends Service>> types = new HashMap<Class<? extends ServiceInfo>, Class<? extends Service>>();
+    private static final Map<Class<? extends ServiceInfo>, Class<? extends org.apache.openejb.config.Service>> types = new HashMap<Class<? extends ServiceInfo>, Class<? extends org.apache.openejb.config.Service>>();
 
     /**
      * This is the magic that allows people to be really vague in their openejb.xml and not specify
@@ -867,15 +836,15 @@ public class ConfigurationFactory implements OpenEjbConfigurationFactory {
 
 
     public <T extends ServiceInfo> T configureService(final Class<? extends T> type) throws OpenEJBException {
-        return configureService((Service) null, type);
+        return configureService((org.apache.openejb.config.Service) null, type);
     }
 
-    private <T extends ServiceInfo> Service getDefaultService(final Class<? extends T> type) throws OpenEJBException {
+    private <T extends ServiceInfo> org.apache.openejb.config.Service getDefaultService(final Class<? extends T> type) throws OpenEJBException {
         final DefaultService defaultService = defaultProviders.get(type);
 
         if (defaultService == null) return null;
 
-        final Service service;
+        final org.apache.openejb.config.Service service;
         try {
             service = JaxbOpenejb.create(defaultService.type);
             service.setType(defaultService.id);
@@ -901,7 +870,7 @@ public class ConfigurationFactory implements OpenEjbConfigurationFactory {
      * @return ServiceInfo
      * @throws OpenEJBException On error
      */
-    public <T extends ServiceInfo> T configureService(Service service, final Class<? extends T> infoType) throws OpenEJBException {
+    public <T extends ServiceInfo> T configureService(org.apache.openejb.config.Service service, final Class<? extends T> infoType) throws OpenEJBException {
         try {
             if (infoType == null) throw new NullPointerException("type");
 
@@ -915,17 +884,12 @@ public class ConfigurationFactory implements OpenEjbConfigurationFactory {
 
             final String providerType = service.getClass().getSimpleName();
 
-            final ServiceProvider provider = resolveServiceProvider(service, infoType);
+            ServiceProvider provider = resolveServiceProvider(service, infoType);
 
+            /* we mock the provider if not found now
             if (provider == null) {
                 final List<ServiceProvider> providers = ServiceUtils.getServiceProvidersByServiceType(providerType);
                 final StringBuilder sb = new StringBuilder();
-//                for (ServiceProvider p : providers) {
-//                    sb.append(System.getProperty("line.separator"));
-//                    sb.append("  <").append(p.getService());
-//                    sb.append(" id=\"").append(service.getId()).append('"');
-//                    sb.append(" provider=\"").append(p.getId()).append("\"/>");
-//                }
 
                 final List<String> types = new ArrayList<String>();
                 for (final ServiceProvider p : providers) {
@@ -940,6 +904,15 @@ public class ConfigurationFactory implements OpenEjbConfigurationFactory {
                 }
                 final String noProviderMessage = messages.format("configureService.noProviderForService", providerType, service.getId(), service.getType(), service.getProvider(), sb.toString());
                 throw new NoSuchProviderException(noProviderMessage);
+            }
+            */
+
+            if (provider == null) { // mock it, service-jar.xml is just a pain for simple resources with no real default
+                String type = service.getProperties().getProperty("class");
+                if (type == null) {
+                    type = service.getType();
+                }
+                provider = new ServiceProvider(type, service.getId(), providerType);
             }
 
             if (service.getId() == null) service.setId(provider.getId());
@@ -1046,7 +1019,7 @@ public class ConfigurationFactory implements OpenEjbConfigurationFactory {
 
 
     @SuppressWarnings({"unchecked"})
-    private ServiceProvider resolveServiceProvider(final Service service, final Class infoType) throws OpenEJBException {
+    private ServiceProvider resolveServiceProvider(final org.apache.openejb.config.Service service, final Class infoType) throws OpenEJBException {
 
         if (service.getProvider() != null) {
             return ServiceUtils.getServiceProvider(service.getProvider());
@@ -1065,7 +1038,7 @@ public class ConfigurationFactory implements OpenEjbConfigurationFactory {
         }
 
         if (infoType != null) {
-            final Service defaultService = getDefaultService(infoType);
+            final org.apache.openejb.config.Service defaultService = getDefaultService(infoType);
             if (defaultService != null) {
                 return resolveServiceProvider(defaultService, null);
             }
@@ -1099,9 +1072,9 @@ public class ConfigurationFactory implements OpenEjbConfigurationFactory {
     public <T extends ServiceInfo> T configureService(final Class<? extends T> type, final String serviceId, final Properties declaredProperties, final String providerId, final String serviceType) throws OpenEJBException {
         if (type == null) throw new NullPointerException("type is null");
 
-        final Class<? extends Service> serviceClass = types.get(type);
+        final Class<? extends org.apache.openejb.config.Service> serviceClass = types.get(type);
         if (serviceClass == null) throw new OpenEJBException("Unsupported service info type: " + type.getName());
-        final Service service;
+        final org.apache.openejb.config.Service service;
         try {
             service = serviceClass.newInstance();
         } catch (Exception e) {
@@ -1375,5 +1348,4 @@ public class ConfigurationFactory implements OpenEjbConfigurationFactory {
             return null;
         }
     }
-
 }

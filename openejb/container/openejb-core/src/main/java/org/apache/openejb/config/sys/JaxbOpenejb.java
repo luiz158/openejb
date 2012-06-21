@@ -20,7 +20,6 @@ import org.apache.openejb.OpenEJBException;
 import org.apache.openejb.config.ConfigUtils;
 import org.apache.openejb.jee.JAXBContextFactory;
 import org.apache.openejb.loader.IO;
-import org.apache.openejb.loader.SystemInstance;
 import org.apache.xbean.finder.ResourceFinder;
 import org.xml.sax.Attributes;
 import org.xml.sax.InputSource;
@@ -121,8 +120,8 @@ public abstract class JaxbOpenejb {
             return (T) createServicesJar();
         } else if (type.equals("TransactionManager")) {
             return (T) createTransactionManager();
-        } else if (type.equals("InitHooks")) {
-            return (T) createInitHooks();
+        } else if (type.equals("Service")) {
+            return (T) createService();
         }
         throw new IllegalArgumentException("Unknown type " + type);
     }
@@ -380,8 +379,8 @@ public abstract class JaxbOpenejb {
         return new Deployments();
     }
 
-    public static InitHooks createInitHooks() {
-        return new InitHooks();
+    public static Service createService() {
+        return new Service();
     }
 
     public static JndiProvider createJndiProvider() {

@@ -51,7 +51,7 @@ import java.util.List;
  * </pre>
  */
 @XmlAccessorType(XmlAccessType.FIELD)
-@XmlType(name = "", propOrder = {"container", "jndiProvider", "securityService", "transactionManager", "connectionManager", "proxyFactory", "connector", "resource", "deployments"})
+@XmlType(name = "", propOrder = {"container", "jndiProvider", "securityService", "transactionManager", "connectionManager", "proxyFactory", "connector", "resource", "deployments", "services"})
 @XmlRootElement(name = "openejb")
 public class Openejb {
 
@@ -73,8 +73,8 @@ public class Openejb {
     protected List<Resource> resource;
     @XmlElement(name = "Deployments")
     protected List<Deployments> deployments;
-    @XmlElement(name = "InitHooks")
-    protected List<InitHooks> hooks;
+    @XmlElement(name = "Service")
+    protected List<Service> services;
 
     /**
      * Gets the value of the container property.
@@ -305,11 +305,11 @@ public class Openejb {
         return this.deployments;
     }
 
-    public List<InitHooks> getHooks() {
-        if (hooks == null) {
-            hooks = new ArrayList<InitHooks>();
+    public List<Service> getServices() {
+        if (services == null) {
+            services = new ArrayList<Service>();
         }
-        return this.hooks;
+        return this.services;
     }
 
     public void add(Object service) {
@@ -331,8 +331,8 @@ public class Openejb {
             setSecurityService((SecurityService) service);
         } else if (service instanceof Deployments) {
             getDeployments().add((Deployments) service);
-        } else if (service instanceof InitHooks) {
-            getHooks().add((InitHooks) service);
+        } else if (service instanceof Service) {
+            getServices().add((Service) service);
         }
     }
 }

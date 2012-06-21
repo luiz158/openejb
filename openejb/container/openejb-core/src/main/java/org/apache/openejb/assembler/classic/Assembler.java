@@ -65,6 +65,7 @@ import javax.transaction.TransactionManager;
 import javax.transaction.TransactionSynchronizationRegistry;
 import javax.validation.ValidationException;
 import javax.validation.ValidatorFactory;
+
 import org.apache.geronimo.connector.GeronimoBootstrapContext;
 import org.apache.geronimo.connector.work.GeronimoWorkManager;
 import org.apache.geronimo.connector.work.HintsContextHandler;
@@ -85,6 +86,9 @@ import org.apache.openejb.OpenEJB;
 import org.apache.openejb.OpenEJBException;
 import org.apache.openejb.OpenEJBRuntimeException;
 import org.apache.openejb.UndeployException;
+import org.apache.openejb.assembler.classic.event.AssemblerCreated;
+import org.apache.openejb.assembler.classic.event.AssemblerDestroyed;
+import org.apache.openejb.assembler.classic.event.ConfigurationLoaded;
 import org.apache.openejb.cdi.CdiAppContextsService;
 import org.apache.openejb.cdi.CdiBuilder;
 import org.apache.openejb.cdi.CdiResourceInjectionService;
@@ -119,6 +123,7 @@ import org.apache.openejb.monitoring.DynamicMBeanWrapper;
 import org.apache.openejb.assembler.monitoring.JMXContainer;
 import org.apache.openejb.monitoring.LocalMBeanServer;
 import org.apache.openejb.monitoring.ObjectNameBuilder;
+import org.apache.openejb.observer.ObserverManager;
 import org.apache.openejb.persistence.JtaEntityManagerRegistry;
 import org.apache.openejb.persistence.PersistenceClassLoaderHandler;
 import org.apache.openejb.resource.GeronimoConnectionManagerFactory;
@@ -255,6 +260,29 @@ public class Assembler extends AssemblerTool implements org.apache.openejb.spi.A
         }
 
         system.setComponent(EjbResolver.class, new EjbResolver(null, EjbResolver.Scope.GLOBAL));
+
+        installExtensions();
+
+        system.fireEvent(new AssemblerCreated());
+    }
+
+    private void installExtensions() {
+
+        final ResourceFinder finder = new ResourceFinder("META-INF");
+
+        try {
+            final List<Class<?>> classes = finder.findAvailableClasses("org.apache.openejb.extension");
+            for (Class<?> clazz : classes) {
+                try {
+                    final Object object = clazz.newInstance();
+                    SystemInstance.get().addObserver(object);
+                } catch (Throwable t) {
+                    logger.error("Extension construction failed" + clazz.getName(), t);
+                }
+            }
+        } catch (IOException e) {
+            logger.error("Extension scanning of 'META-INF/org.apache.openejb.extension' files failed", e);
+        }
     }
 
     private void setConfiguration(OpenEjbConfiguration config) {
@@ -383,6 +411,10 @@ public class Assembler extends AssemblerTool implements org.apache.openejb.spi.A
      * @see OpenEjbConfiguration
      */
     public void buildContainerSystem(final OpenEjbConfiguration configInfo) throws Exception {
+
+        for (ServiceInfo serviceInfo : configInfo.facilities.services) {
+            createService(serviceInfo);
+        }
 
         ContainerSystemInfo containerSystemInfo = configInfo.containerSystem;
 
@@ -1011,7 +1043,7 @@ public class Assembler extends AssemblerTool implements org.apache.openejb.spi.A
         // Sort all the singletons to the back of the list.  We want to make sure
         // all non-singletons are created first so that if a singleton refers to them
         // they are available.
-        Collections.sort(deployments, new Comparator<BeanContext>(){
+        Collections.sort(deployments, new Comparator<BeanContext>() {
             public int compare(BeanContext a, BeanContext b) {
                 int aa = (a.getComponentType() == BeanType.SINGLETON) ? 1 : 0;
                 int bb = (b.getComponentType() == BeanType.SINGLETON) ? 1 : 0;
@@ -1091,6 +1123,7 @@ public class Assembler extends AssemblerTool implements org.apache.openejb.spi.A
         SystemInstance.get().removeComponent(JtaEntityManagerRegistry.class);
         SystemInstance.get().removeComponent(TransactionSynchronizationRegistry.class);
         SystemInstance.get().removeComponent(EjbResolver.class);
+        SystemInstance.get().fireEvent(new AssemblerDestroyed());
         SystemInstance.reset();
     }
 
@@ -1483,6 +1516,27 @@ public class Assembler extends AssemblerTool implements org.apache.openejb.spi.A
         }
     }
 
+    public void createService(ServiceInfo serviceInfo) throws OpenEJBException {
+        ObjectRecipe serviceRecipe = createRecipe(serviceInfo);
+
+        Object service = serviceRecipe.create();
+        SystemInstance.get().addObserver(service);
+
+        Class serviceClass = service.getClass();
+
+        logUnusedProperties(serviceRecipe, serviceInfo);
+
+        getContext().put(serviceClass.getName(), service);
+
+        props.put(serviceClass.getName(), service);
+        props.put(serviceInfo.service, service);
+        props.put(serviceInfo.id, service);
+
+        config.facilities.services.add(serviceInfo);
+
+        logger.getChildLogger("service").debug("createService.success", serviceInfo.service, serviceInfo.id, serviceInfo.className);
+    }
+
     public void createProxyFactory(ProxyFactoryInfo serviceInfo) throws OpenEJBException {
 
         ObjectRecipe serviceRecipe = createRecipe(serviceInfo);
@@ -1842,6 +1896,8 @@ public class Assembler extends AssemblerTool implements org.apache.openejb.spi.A
             if (info.types.contains("javax.mail.Session")) return;
             //---
 
+            if (info.types.isEmpty() && "class".equalsIgnoreCase(property)) continue; // inline service (no sp)
+
             logger.getChildLogger("service").warning("unusedProperty", property, info.id);
         }
     }
@@ -1942,5 +1998,4 @@ public class Assembler extends AssemblerTool implements org.apache.openejb.spi.A
             return thread;
         }
     }
-
 }
