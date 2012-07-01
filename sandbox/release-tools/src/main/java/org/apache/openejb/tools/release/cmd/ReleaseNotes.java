@@ -25,6 +25,6 @@ import org.apache.openejb.tools.release.Command;
 public class ReleaseNotes {
 
     public static void main(String[] args) throws Throwable {
-        org.codehaus.swizzle.jirareport.Main.main(new String[]{"release-notes.vm"});
+        org.codehaus.swizzle.jirareport.Main.main(new String[]{"release-notes-html.vm"});
     }
 }

@@ -31,7 +31,6 @@ import org.apache.openejb.OpenEJBRuntimeException;
 import org.apache.openejb.OpenEjbContainer;
 import org.apache.openejb.assembler.classic.AppInfo;
 import org.apache.openejb.assembler.classic.Assembler;
-import org.apache.openejb.assembler.classic.WebAppBuilder;
 import org.apache.openejb.config.AppModule;
 import org.apache.openejb.config.ConfigurationFactory;
 import org.apache.openejb.config.DeploymentFilterable;
@@ -110,23 +109,18 @@ public class OpenEJBDeployableContainer implements DeployableContainer<OpenEJBCo
     private InstanceProducer<ClassLoader> classLoader;
 
     @Inject
-    @SuiteScoped
     private Instance<AppModule> module;
 
     @Inject
-    @DeploymentScoped
     private Instance<ServletContext> servletContext;
 
     @Inject
-    @DeploymentScoped
     private Instance<HttpSession> session;
 
     @Inject
-    @DeploymentScoped
     private Instance<AppInfo> info;
 
     @Inject
-    @DeploymentScoped
     private Instance<AppContext> appContext;
 
     @Override

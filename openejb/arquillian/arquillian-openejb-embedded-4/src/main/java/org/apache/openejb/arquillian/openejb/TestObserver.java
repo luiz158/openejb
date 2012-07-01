@@ -24,17 +24,19 @@ import org.jboss.arquillian.core.api.Instance;
 import org.jboss.arquillian.core.api.annotation.Inject;
 import org.jboss.arquillian.core.api.annotation.Observes;
 import org.jboss.arquillian.core.spi.EventContext;
-import org.jboss.arquillian.test.spi.annotation.SuiteScoped;
-import org.jboss.arquillian.test.spi.event.suite.Test;
+import org.jboss.arquillian.test.spi.TestClass;
+import org.jboss.arquillian.test.spi.event.suite.ClassEvent;
 
 public class TestObserver {
     @Inject
-    @SuiteScoped
     private Instance<ClassLoader> classLoader;
 
-    public void observe(@Observes EventContext<Test> event) {
+    @Inject
+    private Instance<TestClass> testClass;
+
+    public void observes(@Observes final EventContext<ClassEvent> event) {
         final BeanContext context = SystemInstance.get().getComponent(ContainerSystem.class)
-                                        .getBeanContext(event.getEvent().getTestClass().getJavaClass().getName());
+                .getBeanContext(testClass.get().getName());
         ThreadContext oldCtx = null;
         ClassLoader oldCl = null;
 
@@ -42,7 +44,9 @@ public class TestObserver {
             oldCtx = ThreadContext.enter(new ThreadContext(context, null));
         } else {
             oldCl = Thread.currentThread().getContextClassLoader();
-            setTCCL(classLoader.get());
+            if (classLoader.get() != null) {
+                setTCCL(classLoader.get());
+            }
         }
 
         try {

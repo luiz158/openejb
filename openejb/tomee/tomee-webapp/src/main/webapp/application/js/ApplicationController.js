@@ -80,6 +80,22 @@ TOMEE.ApplicationController = function () {
         ]
     });
 
+    channel.bind('new.data', function (params) {
+
+        if (params['GetDeployedApplications']) {
+            deployments.loadDeployeApps(params['GetDeployedApplications']);
+            consolePanel.loadAppsField(params['GetDeployedApplications'].uids);
+        }
+
+        if (params['GetSessionData']) {
+            savedPanel.load(params['GetSessionData']);
+        }
+
+        if (params['GetLog']) {
+            logView.loadData(params['GetLog']);
+        }
+    });
+
     channel.bind('default.ajax.error.handler.triggered', function (params) {
         TOMEE.ErrorPanel({
             channel:channel
@@ -92,7 +108,7 @@ TOMEE.ApplicationController = function () {
         });
 
         channel.bind('application.logout', function (params) {
-            model.logout();
+            model.executeCommands(model.logout());
         });
 
         channel.bind('app.logout.bye', function (params) {
@@ -137,11 +153,11 @@ TOMEE.ApplicationController = function () {
 
             //params.panelKey, params.bean, params.parentEl
             if (params.panelKey === 'jndi') {
-                model.loadJndi({
+                model.executeCommands(model.loadJndi({
                     path:pathArrayBuilder.build(params.bean),
                     bean:params.bean,
                     parentEl:params.parentEl
-                });
+                }));
             }
         });
 
@@ -164,25 +180,23 @@ TOMEE.ApplicationController = function () {
 
         channel.bind('show.class.panel', function (params) {
             var data = params.data;
-            model.loadJndiClass({
-                name:data.name,
-                parent:data.parent,
-                path:pathArrayBuilder.build(data.parent)
-            });
+            model.executeCommands(model.loadJndiClass({
+                data:data
+            }));
         });
 
         channel.bind('lookup.and.save.object', function (params) {
-            model.lookupJndi({
+            model.executeCommands(model.lookupJndi({
                 name:params.showParams.name,
-                path:pathArrayBuilder.build(params.showParams.parent),
+                path:params.showParams.path,
                 saveKey:params.saveKey
-            });
+            }));
         });
 
         channel.bind('application.jdni.load', function (params) {
-            model.loadJndi({
+            model.executeCommands(model.loadJndi({
                 path:['']
-            });
+            }));
         });
 
 
@@ -191,15 +205,7 @@ TOMEE.ApplicationController = function () {
 
     (function () {
         channel.bind('deploy.file.uploaded', function (params) {
-            model.deployApp(params.file);
-        });
-
-        channel.bind('app.deployment.result', function (params) {
-            model.loadDeployedApps();
-        });
-
-        channel.bind('app.new.deployment.data', function (params) {
-            deployments.loadDeployeApps(params);
+            model.executeCommands(model.deployApp(params.file));
         });
     })();
 
@@ -212,7 +218,7 @@ TOMEE.ApplicationController = function () {
 
     (function () {
         channel.bind('trigger.console.exec', function (params) {
-            model.execute(params.codeType, params.codeText);
+            model.executeCommands(model.execute(params));
         });
 
         channel.bind('app.console.executed', function (params) {
@@ -220,32 +226,25 @@ TOMEE.ApplicationController = function () {
             throw "app.console.executed not implemented";
         });
 
-        channel.bind('app.console.executed.error', function (params) {
-            //TODO Implement me
-            //Handle an eventual script execution error
-            throw "app.console.executed.error not implemented";
-        });
+//TODO
+//        channel.bind('app.console.executed.error', function (params) {
+//            //TODO Implement me
+//            //Handle an eventual script execution error
+//            throw "app.console.executed.error not implemented";
+//        });
     })();
 
 
     (function () {
-        channel.bind('app.new.log.data', function (params) {
-            logView.loadData(params);
-        });
-
         channel.bind('trigger.log.load', function (params) {
-            model.loadLog(params.file, params.tail);
+            model.executeCommands(model.loadLog(params.file, params.tail));
         });
     })();
 
 
     (function () {
-        channel.bind('app.new.session.data', function (params) {
-            savedPanel.load(params);
-        });
-
         channel.bind('application.saved.objects.load', function (params) {
-            model.loadSessionData();
+            model.executeCommands(model.loadSessionData());
         });
     })();
 
@@ -262,17 +261,28 @@ TOMEE.ApplicationController = function () {
         }, 'home')
     });
 
-    model.loadSystemInfo(function (data) {
-        view.setTomeeVersion(data.tomee);
-        homeView.setTomeeVersion(data.tomee);
-        view.render();
-    });
 
-    model.loadLog(null, null);
-    model.loadJndi({
-        path:['']
+    var getAsync = function(obj) {
+        obj.async = true;
+        return obj;
+    }
+    model.executeCommands(
+        getAsync(model.loadLog(null, null)),
+        getAsync(model.loadJndi({
+            path:['']
+        })),
+        getAsync(model.loadDeployedApps()),
+        getAsync(model.loadSystemInfo(function (data) {
+            view.setTomeeVersion(data['GetSystemInfo'].tomee);
+            homeView.setTomeeVersion(data['GetSystemInfo'].tomee);
+            view.render();
+        }))
+    );
+
+    channel.bind('default.script.loaded', function(data) {
+        consolePanel.setScript(data);
     });
-    model.loadDeployedApps();
+    consolePanel.setScript(model.getLastScript());
 
     return {
 

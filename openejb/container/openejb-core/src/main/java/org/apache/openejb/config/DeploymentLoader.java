@@ -850,7 +850,7 @@ public class DeploymentLoader implements DeploymentFilterable {
 
         if (complete == null) return;
 
-        final EjbModule ejbModule = new EjbModule(appModule.getClassLoader(), "ear-scoped-cdi-beans", new EjbJar(), new OpenejbJar());
+        final EjbModule ejbModule = new EjbModule(appModule.getClassLoader(), "ear-scoped-cdi-beans_" + appModule.getModuleId(), new EjbJar(), new OpenejbJar());
         ejbModule.setBeans(complete);
         ejbModule.setFinder(new FinderFactory.ModuleLimitedFinder(new org.apache.xbean.finder.AnnotationFinder(new WebappAggregatedArchive(appModule.getClassLoader(), appModule.getAltDDs(), xmls))));
 
@@ -1459,7 +1459,7 @@ public class DeploymentLoader implements DeploymentFilterable {
         final Class<? extends DeploymentModule> defaultType = (Class<? extends DeploymentModule>) SystemInstance.get().getOptions().get("openejb.default.deployment-module", (Class<?>) null);
         if (defaultType != null) {
             // should we do a better filtering? it seems enough for common cases.
-            if (WebModule.class.equals(defaultType) && path.endsWith(".jar")) {
+            if (WebModule.class.equals(defaultType) && (path.endsWith(".jar!") || path.endsWith(".jar"))) {
                 throw new UnknownModuleTypeException("Unknown module type: url=" + path + " which can't be a war.");
             }
 

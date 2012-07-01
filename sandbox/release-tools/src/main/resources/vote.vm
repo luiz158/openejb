@@ -6,7 +6,7 @@ From: $from
 
 SVN Tag:
 
- $tags$openejbVersion/
+ $tags$openejbVersionName/
 
 Maven Repo:
 
@@ -14,7 +14,7 @@ Maven Repo:
 
 Binaries & Source:
 
- http://people.apache.org/~$user/staging-$build/$openejbVersion/
+ http://people.apache.org/~$user/staging-$build/$openejbVersionName/
 
 Legal:
 

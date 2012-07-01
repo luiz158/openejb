@@ -27,9 +27,29 @@ TOMEE.ApplicationModel = function (cfg) {
     var channel = cfg.channel;
 
     var systemInfo = {};
-    var logInfo = {};
     var sessionData = {};
     var executions = [];
+
+    var getLastScript = function () {
+        return TOMEE.utils.getSafe(TOMEE.storage.getSession('lastScript_code'), (function () {
+            $.ajax({
+                    url:'application/js/SampleScript.js',
+                    method:'GET',
+                    dataType:'text',
+                    success:function (data) {
+                        channel.send('default.script.loaded', data);
+                    }
+                }
+            );
+
+            //for now just return ''
+            return '';
+        })());
+    };
+
+    var setLastScript = function (code) {
+        TOMEE.storage.setSession('lastScript_code', code);
+    };
 
     var request = function (params) {
         var errorHandler = params.error;
@@ -47,7 +67,13 @@ TOMEE.ApplicationModel = function (cfg) {
                 type:params.method,
                 data:params.data,
                 dataType:'json',
-                success:params.success,
+                success:function (data) {
+                    if (params.success) {
+                        params.success(data);
+                    }
+
+                    channel.send('new.data', data);
+                },
                 error:errorHandler
             }
         );
@@ -65,86 +91,149 @@ TOMEE.ApplicationModel = function (cfg) {
         return vars;
     };
 
+    var executeCommands = function () {
+        var myCommands = [];
+        for (var i = 0; i < arguments.length; i++) {
+            var myArg = TOMEE.utils.getArray(arguments[i]);
+            for (var ii = 0; ii < myArg.length; ii++) {
+                myCommands.push(myArg[ii]);
+            }
+        }
+
+        var cmdNames = [];
+        var asyncCmdNames = [];
+
+        var successCallbacks = [];
+        var errorCallbacks = [];
+
+        var executeCallbacks = function (callbacks, data) {
+            for (var i = 0; i < callbacks.length; i++) {
+                callbacks[i](data);
+            }
+        }
+
+        var myFinalCommand = {
+            method:'POST',
+            url:TOMEE.baseURL('command'),
+            data:{},
+            success:function (data) {
+                executeCallbacks(successCallbacks, data);
+            },
+            error:function (data) {
+                executeCallbacks(errorCallbacks, data);
+            }
+        };
+
+        var cmdConfig = null;
+        var paramsData = null;
+        for (var i = 0; i < myCommands.length; i++) {
+            cmdConfig = myCommands[i];
+            if (cmdConfig.cmd) {
+                if (cmdConfig.async) {
+                    asyncCmdNames.push(cmdConfig.cmd);
+                } else {
+                    cmdNames.push(cmdConfig.cmd);
+                }
+            }
+
+            paramsData = TOMEE.utils.getObject(cmdConfig.data);
+            for (var key in paramsData) {
+                myFinalCommand.data[key] = paramsData[key];
+            }
+
+            if (cmdConfig.success) {
+                successCallbacks.push(cmdConfig.success);
+            }
+
+            if (cmdConfig.error) {
+                errorCallbacks.push(cmdConfig.error);
+            }
+        }
+
+        if (cmdNames.length > 0) {
+            myFinalCommand.data.cmd = cmdNames.join(',');
+        }
+
+        if (asyncCmdNames.length > 0) {
+            myFinalCommand.data.asyncCmd = asyncCmdNames.join(',');
+        }
+
+        if (errorCallbacks.length === 0) {
+            delete myFinalCommand.error;
+        }
+
+        request(myFinalCommand);
+    };
+
     return {
+        getLastScript:getLastScript,
         getUrlVars:getUrlVars,
+        executeCommands:executeCommands,
         logout:function () {
-            request({
-                method:'GET',
-                url:TOMEE.baseURL('logout'),
+            return {
+                cmd:'Logout',
                 success:function () {
                     channel.send('app.logout.bye', {});
                 }
-            });
+            };
         },
         deployApp:function (path) {
-            request({
-                method:'POST',
-                url:TOMEE.baseURL('deploy'),
-                data:{
-                    path:path
+            return [
+                {
+                    cmd:'DeployApplication',
+                    data:{
+                        path:path
+                    }
+
                 },
-                success:function (data) {
-                    channel.send('app.deployment.result', data);
+                {
+                    cmd:'GetDeployedApplications'
                 }
-            });
+            ];
         },
         loadDeployedApps:function () {
-            request({
-                method:'GET',
-                url:TOMEE.baseURL('deploy'),
-                success:function (data) {
-                    channel.send('app.new.deployment.data', data);
-                }
-            });
+            return {
+                cmd:'GetDeployedApplications'
+            };
         },
         loadSystemInfo:function (callback) {
-            request({
-                method:'GET',
-                url:TOMEE.baseURL('system'),
+            return {
+                cmd:'GetSystemInfo',
                 success:function (data) {
                     systemInfo = data;
-                    channel.send('app.system.info', data);
+                    channel.send('app.system.info', data['GetSystemInfo']);
 
                     if (callback) {
                         callback(data);
                     }
                 }
-            });
+            };
         },
-        getSystemInfo:function () {
-            return systemInfo;
-        },
-        execute:function (codeType, codeText) {
+        execute:function (params) {
             var executionBean = {
-                codeType:codeType,
-                codeText:codeText,
+                params:params,
                 start:(new Date())
             };
             executions.push(executionBean);
 
-            request({
-                method:'POST',
-                url:TOMEE.baseURL('console'),
-                data:{
-                    engineName:codeType,
-                    scriptCode:codeText
-                },
-                success:function (data) {
-                    executionBean.success = true;
-                    executionBean.data = data;
-                    executionBean.end = (new Date());
+            return [
+                {
+                    cmd:'RunScript',
+                    data:params,
+                    success:function (data) {
+                        setLastScript(params.scriptCode);
 
-                    channel.send('app.console.executed', executionBean);
-                },
-                error:function (data) {
-                    executionBean.success = false;
-                    executionBean.data = data;
-                    executionBean.end = (new Date());
+                        executionBean.success = true;
+                        executionBean.data = data['GetSystemInfo'];
+                        executionBean.end = (new Date());
 
-                    channel.send('app.console.executed.error', executionBean);
+                        channel.send('app.console.executed', executionBean);
+                    }
+                },
+                {
+                    cmd:'GetSessionData'
                 }
-            });
-
+            ];
         },
         loadLog:function (file, tail) {
             var data = {
@@ -159,34 +248,23 @@ TOMEE.ApplicationModel = function (cfg) {
                 data.tail = tail;
             }
 
-            request({
-                method:'GET',
-                url:TOMEE.baseURL('log'),
-                data:data,
-                success:function (data) {
-                    logInfo = data;
-                    channel.send('app.new.log.data', data);
-                }
-            });
-        },
-        getLogInfo:function () {
-            return logInfo;
+            return {
+                cmd:'GetLog',
+                data:data
+            };
         },
         loadSessionData:function () {
-            request({
-                method:'GET',
-                url:TOMEE.baseURL('data'),
+            return {
+                cmd:'GetSessionData',
                 success:function (data) {
                     sessionData = data;
-                    channel.send('app.new.session.data', data);
                 }
-            });
+            };
         },
         loadJndi:function (params) {
             //params.path, params.bean, params.parentEl
-            request({
-                method:'GET',
-                url:TOMEE.baseURL('jndi'),
+            return {
+                cmd:'GetJndiTree',
                 data:{
                     path:TOMEE.utils.getSafe(params.path, []).join(',')
                 },
@@ -202,51 +280,53 @@ TOMEE.ApplicationModel = function (cfg) {
                     })();
 
                     channel.send('app.new.jndi.data', {
-                        names:data.names,
+                        names:data['GetJndiTree'].names,
                         path:params.path,
                         bean:params.bean,
                         parentEl:params.parentEl
                     });
                 }
-            });
+            };
         },
         loadJndiClass:function (params) {
             //params.path, params.bean, params.parentEl
-            request({
-                method:'GET',
-                url:TOMEE.baseURL('jndi'),
+            return {
+                cmd:'GetJndiTree',
                 data:{
-                    name:params.name,
-                    path:TOMEE.utils.getSafe(params.path, []).join(',')
+                    name:params.data.name,
+                    path:TOMEE.utils.getSafe(params.data.ctxPath, '')
                 },
                 success:function (data) {
                     channel.send('app.new.jndi.class.data', {
-                        cls:data.cls,
-                        name:params.name,
-                        parent:params.parent,
-                        path:params.path
+                        cls:data['GetJndiTree'].cls,
+                        name:params.data.name,
+                        path:TOMEE.utils.getSafe(params.data.ctxPath, '')
                     });
                 }
-            });
+            };
         },
         lookupJndi:function (params) {
             //params.path, params.bean, params.parentEl
-            request({
-                method:'POST',
-                url:TOMEE.baseURL('jndi'),
-                data:{
-                    name:params.name,
-                    path:TOMEE.utils.getSafe(params.path, []).join(','),
-                    saveKey:params.saveKey
-                },
-                success:function (data) {
-                    channel.send('app.new.jndi.bean', {
+            return [
+                {
+                    cmd:'JndiLookup',
+                    data:{
                         name:params.name,
                         path:params.path,
                         saveKey:params.saveKey
-                    });
+                    },
+                    success:function (data) {
+                        channel.send('app.new.jndi.bean', {
+                            name:params.name,
+                            path:params.path,
+                            saveKey:params.saveKey
+                        });
+                    }
+                },
+                {
+                    cmd:'GetSessionData'
                 }
-            });
+            ];
         }
     };
 }

@@ -1,0 +1,39 @@
+Subject: [VOTE] OpenEJB $openejbVersion/TomEE $tomeeVersion (staging-$build)
+To: $to
+From: $from
+
+[generated email]
+
+Changes since last vote:
+
+#foreach( $commit in $commits )
+  - r$commit.revision | $commit.author | $commit.date | $commit.paths.size()
+    http://svn.apache.org/viewvc?view=revision&revision=$commit.revision
+
+$commit.message
+
+#end
+
+Successful Build:
+
+ http://ci.apache.org/builders/$ciBuilder/builds/$ciBuildNumber
+
+SVN Tag:
+
+ $tags$openejbVersionName/
+
+Maven Repo:
+
+ $staging
+
+Binaries & Source:
+
+ http://people.apache.org/~$user/staging-$build/$openejbVersionName/
+
+Legal:
+
+ http://people.apache.org/~$user/staging-$build/legal/archives.html
+
+
+Vote will be open for 72 hours or as needed.
+

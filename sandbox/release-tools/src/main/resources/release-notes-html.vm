@@ -1,0 +1,62 @@
+#set( $version = "1.0.0" )
+#set( $upgrades = $utils.load("org.apache.openejb.tools.release.Upgrades") )
+#set( $upgrades = $upgrades.add("TOMEE", ["1.0.0"]) )
+#set( $upgrades = $upgrades.add("OPENEJB", ["4.0.0"]) )
+#set( $upgrades = $upgrades.add("OWB", ["1.1.4"]) )
+###set( $upgrades = $upgrades.add("AMQ", ["5.4.3", "5.5.0", "5.5.1"]) )
+###set( $upgrades = $upgrades.add("CXF", ["2.4.2", "2.4.3", "2.4.4", "2.4.5", "2.5", "2.5.1"]) )
+#set( $issues = $upgrades.issues.unique("key") )
+
+Apache TomEE $version
+
+$date
+
+<h2>Upgrades</h2>
+
+<ul>
+#foreach ( $issue in $issues.equals("type", "Dependency upgrade") )
+    <li><a href="https://issues.apache.org/jira/browse/$issue.key">$issue.key</a> $issue.summary</li>
+#end
+</ul>
+
+<h2>New Features</h2>
+
+<ul>
+
+#foreach ( $issue in $issues.equals("type", "New Feature") )
+<li><a href="https://issues.apache.org/jira/browse/$issue.key">$issue.key</a> $issue.summary</li>
+#end
+</ul>
+
+<h2>Improvements</h2>
+
+<ul>
+
+#foreach ( $issue in $issues.equals("type", "Improvement") )
+<li><a href="https://issues.apache.org/jira/browse/$issue.key">$issue.key</a> $issue.summary</li>
+#end
+</ul>
+
+<h2>Bugs</h2>
+
+<ul>
+
+#foreach ( $issue in $issues.equals("type", "Bug") )
+<li><a href="https://issues.apache.org/jira/browse/$issue.key">$issue.key</a> $issue.summary</li>
+#end
+</ul>
+
+<h2>Tasks & Sub-Tasks</h2>
+
+<ul>
+
+
+
+#foreach ( $issue in $issues.equals("type", "Task") )
+<li><a href="https://issues.apache.org/jira/browse/$issue.key">$issue.key</a> $issue.summary</li>
+#end
+#foreach ( $issue in $issues.equals("type", "Sub-task") )
+<li><a href="https://issues.apache.org/jira/browse/$issue.key">$issue.key</a> $issue.summary</li>
+#end
+
+</ul>
