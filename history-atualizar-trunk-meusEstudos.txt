@@ -1,0 +1,16 @@
+
+cd /opt/git/treino
+git clone git@github.com:luiz158/openejb.git
+cd openejb/
+git remote add apache git://github.com/apache/openejb.git
+git pull apache trunk
+git status
+git push
+git checkout meusEstudos 
+git merge trunk
+git status
+git push
+git status
+
+
+
